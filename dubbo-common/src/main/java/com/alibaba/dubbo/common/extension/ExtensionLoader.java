@@ -68,6 +68,7 @@ public class ExtensionLoader<T> {
 
     private static final Pattern NAME_SEPARATOR = Pattern.compile("\\s*[,]+\\s*");
 
+    // 接口对应的loader的缓存,类属性
     private static final ConcurrentMap<Class<?>, ExtensionLoader<?>> EXTENSION_LOADERS = new ConcurrentHashMap<Class<?>, ExtensionLoader<?>>();
 
     private static final ConcurrentMap<Class<?>, Object> EXTENSION_INSTANCES = new ConcurrentHashMap<Class<?>, Object>();
@@ -83,9 +84,16 @@ public class ExtensionLoader<T> {
     private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<Map<String, Class<?>>>();
 
     private final Map<String, Activate> cachedActivates = new ConcurrentHashMap<String, Activate>();
+
+    // 接口实现的缓存,是实例属性,不同的接口不共享
+    // 之前看到文章说不同的接口key需要不一样,其实没必要
     private final ConcurrentMap<String, Holder<Object>> cachedInstances = new ConcurrentHashMap<String, Holder<Object>>();
+
     private final Holder<Object> cachedAdaptiveInstance = new Holder<Object>();
+
     private volatile Class<?> cachedAdaptiveClass = null;
+
+    // @SPI(value="cachedDefaultName") 模式实现的key
     private String cachedDefaultName;
     private volatile Throwable createAdaptiveInstanceError;
 
@@ -102,6 +110,8 @@ public class ExtensionLoader<T> {
         return type.isAnnotationPresent(SPI.class);
     }
 
+
+    // 获取ExtensionLowader
     @SuppressWarnings("unchecked")
     public static <T> ExtensionLoader<T> getExtensionLoader(Class<T> type) {
         if (type == null)
@@ -113,7 +123,7 @@ public class ExtensionLoader<T> {
             throw new IllegalArgumentException("Extension type(" + type +
                     ") is not extension, because WITHOUT @" + SPI.class.getSimpleName() + " Annotation!");
         }
-
+        // 首先查看本地的缓存
         ExtensionLoader<T> loader = (ExtensionLoader<T>) EXTENSION_LOADERS.get(type);
         if (loader == null) {
             EXTENSION_LOADERS.putIfAbsent(type, new ExtensionLoader<T>(type));
@@ -285,6 +295,8 @@ public class ExtensionLoader<T> {
         return Collections.unmodifiableSet(new TreeSet<String>(cachedInstances.keySet()));
     }
 
+
+    // 获取加载的实例
     /**
      * Find the extension with the given name. If the specified name is not found, then {@link IllegalStateException}
      * will be thrown.
@@ -294,18 +306,28 @@ public class ExtensionLoader<T> {
         if (name == null || name.length() == 0)
             throw new IllegalArgumentException("Extension name == null");
         if ("true".equals(name)) {
+            // name=true是获取默认的扩展实现
+            // 使用@SPI注解,用户加载默认的实现
             return getDefaultExtension();
         }
+
+        // 支持了多线程的访问
+        // Holder是volatile的容器
         Holder<Object> holder = cachedInstances.get(name);
         if (holder == null) {
+            // 没有实例,只是增加的缓存容器
             cachedInstances.putIfAbsent(name, new Holder<Object>());
             holder = cachedInstances.get(name);
         }
+
+        // 使用双重校验
+        // 所有的实例都是单例的实现
         Object instance = holder.get();
         if (instance == null) {
             synchronized (holder) {
                 instance = holder.get();
                 if (instance == null) {
+                    // 创建实例索引
                     instance = createExtension(name);
                     holder.set(instance);
                 }
@@ -323,6 +345,8 @@ public class ExtensionLoader<T> {
                 || "true".equals(cachedDefaultName)) {
             return null;
         }
+        // 模式加载
+        // @SPI(value = "cachedDefaultName")
         return getExtension(cachedDefaultName);
     }
 
@@ -491,6 +515,7 @@ public class ExtensionLoader<T> {
         try {
             T instance = (T) EXTENSION_INSTANCES.get(clazz);
             if (instance == null) {
+                // 实例是原型的;不是单例类型的
                 EXTENSION_INSTANCES.putIfAbsent(clazz, clazz.newInstance());
                 instance = (T) EXTENSION_INSTANCES.get(clazz);
             }
@@ -560,6 +585,8 @@ public class ExtensionLoader<T> {
         return classes;
     }
 
+
+    //
     // synchronized in getExtensionClasses
     private Map<String, Class<?>> loadExtensionClasses() {
         final SPI defaultAnnotation = type.getAnnotation(SPI.class);
@@ -571,6 +598,7 @@ public class ExtensionLoader<T> {
                     throw new IllegalStateException("more than 1 default extension name on extension " + type.getName()
                             + ": " + Arrays.toString(names));
                 }
+                // 使用@SPI指定加载默认的扩展实现
                 if (names.length == 1) cachedDefaultName = names[0];
             }
         }
