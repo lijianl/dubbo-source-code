@@ -27,6 +27,7 @@ import java.util.List;
 /**
  * AdaptiveExtensionFactory
  */
+
 @Adaptive
 public class AdaptiveExtensionFactory implements ExtensionFactory {
 
@@ -36,6 +37,7 @@ public class AdaptiveExtensionFactory implements ExtensionFactory {
         ExtensionLoader<ExtensionFactory> loader = ExtensionLoader.getExtensionLoader(ExtensionFactory.class);
         List<ExtensionFactory> list = new ArrayList<ExtensionFactory>();
         for (String name : loader.getSupportedExtensions()) {
+            // 遍历所有的 ExtensionFactory
             list.add(loader.getExtension(name));
         }
         factories = Collections.unmodifiableList(list);
