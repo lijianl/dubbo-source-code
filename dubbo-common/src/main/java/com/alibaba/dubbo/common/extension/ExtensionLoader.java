@@ -58,7 +58,6 @@ public class ExtensionLoader<T> {
     private static final String DUBBO_INTERNAL_DIRECTORY = DUBBO_DIRECTORY + "internal/";
     // keyName,key=>instance
     private static final Pattern NAME_SEPARATOR = Pattern.compile("\\s*[,]+\\s*");
-
     private volatile Throwable createAdaptiveInstanceError;
     private Map<String, IllegalStateException> exceptions = new ConcurrentHashMap<String, IllegalStateException>();
 
@@ -112,7 +111,7 @@ public class ExtensionLoader<T> {
     private final ConcurrentMap<String, Holder<Object>> cachedInstances = new ConcurrentHashMap<String, Holder<Object>>();
     // 这个设计...有点无语; 配置文件缓存是实例属性,实例的缓存确是类属性
     private static final ConcurrentMap<Class<?>, Object> EXTENSION_INSTANCES = new ConcurrentHashMap<Class<?>, Object>();
-    // 扩展类Adpative自适应实现
+    // @Adaptive注解的类=> 主要看@Adaptive注解的方法
     private volatile Class<?> cachedAdaptiveClass = null;
     // 缓存@Adaptice的实例
     private final Holder<Object> cachedAdaptiveInstance = new Holder<Object>();
@@ -350,6 +349,7 @@ public class ExtensionLoader<T> {
                 // 默认的自适应实现
                 cachedAdaptiveClass = clazz;
             } else if (!cachedAdaptiveClass.equals(clazz)) {
+                // 一个接口只有一个自适应的实现
                 throw new IllegalStateException("More than 1 adaptive class found: "
                         + cachedAdaptiveClass.getClass().getName()
                         + ", " + clazz.getClass().getName());
@@ -439,7 +439,327 @@ public class ExtensionLoader<T> {
     }
 
 
-    // 3. ========
+    // 3. ======== adaptive,自适应的代理逻辑
+    // loaderClass已经缓存，一个接口只有一个Adaptive实现
+    // private volatile Class<?> cachedAdaptiveClass = null;
+    // 缓存@Adaptice的实例
+    // private final Holder<Object> cachedAdaptiveInstance = new Holder<Object>();
+
+    @SuppressWarnings("unchecked")
+    public T getAdaptiveExtension() {
+        Object instance = cachedAdaptiveInstance.get();
+        if (instance == null) {
+            if (createAdaptiveInstanceError == null) {
+                synchronized (cachedAdaptiveInstance) {
+                    instance = cachedAdaptiveInstance.get();
+                    if (instance == null) {
+                        try {
+                            // @Adaptive=>一个接口就只有一个,加锁创建
+                            instance = createAdaptiveExtension();
+                            cachedAdaptiveInstance.set(instance);
+                        } catch (Throwable t) {
+                            createAdaptiveInstanceError = t;
+                            throw new IllegalStateException("fail to create adaptive instance: " + t.toString(), t);
+                        }
+                    }
+                }
+            } else {
+                throw new IllegalStateException("fail to create adaptive instance: " + createAdaptiveInstanceError.toString(), createAdaptiveInstanceError);
+            }
+        }
+        return (T) instance;
+    }
+
+    @SuppressWarnings("unchecked")
+    private T createAdaptiveExtension() {
+        try {
+            // 代理类的依赖注入,getAdaptiveExtensionClass
+            return injectExtension((T) getAdaptiveExtensionClass().newInstance());
+        } catch (Exception e) {
+            throw new IllegalStateException("Can not create adaptive extension " + type + ", cause: " + e.getMessage(), e);
+        }
+    }
+
+    private Class<?> getAdaptiveExtensionClass() {
+        getExtensionClasses();
+        if (cachedAdaptiveClass != null) {
+            // 注解在类上
+            return cachedAdaptiveClass;
+        }
+        //@Adaptive注解在方法上
+        return cachedAdaptiveClass = createAdaptiveExtensionClass();
+    }
+
+    // 创建Aaptive, 此处处理的的是@Adaptive 注解在方法上的
+    // 这种逻辑只适合注解在方法上；注解在类上的已经实现,不需要组织代码编译
+    private Class<?> createAdaptiveExtensionClass() {
+        //@Adaptive注解方法的class实现,
+        String code = createAdaptiveExtensionClassCode();
+        ClassLoader classLoader = findClassLoader();
+        // 编译=>使用的自适应编译器实现
+        com.alibaba.dubbo.common.compiler.Compiler compiler = ExtensionLoader.getExtensionLoader(com.alibaba.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
+        // 生成字节码class
+        return compiler.compile(code, classLoader);
+    }
+
+    // 处理有Adaptie注解的方法
+    // 总结下处理的方式=> 使用string拼接自适应逻辑
+    private String createAdaptiveExtensionClassCode() {
+        // String拼接，StringBuilder不用考虑线程安全
+        StringBuilder codeBuilder = new StringBuilder();
+        // Apative注解方法
+        Method[] methods = type.getMethods();
+        // 判断是否有Adaptive的方法注解
+        boolean hasAdaptiveAnnotation = false;
+        for (Method m : methods) {
+            if (m.isAnnotationPresent(Adaptive.class)) {
+                hasAdaptiveAnnotation = true;
+                break;
+            }
+        }
+        // no need to generate adaptive class since there's no adaptive method found.
+        if (!hasAdaptiveAnnotation)
+            throw new IllegalStateException("No adaptive method on extension " + type.getName() + ", refuse to create the adaptive class!");
+
+        // 使用代码编辑
+        // 同名package
+        codeBuilder.append("package ").append(type.getPackage().getName()).append(";");
+        // import ExtensionLoader
+        codeBuilder.append("\nimport ").append(ExtensionLoader.class.getName()).append(";");
+        // Adaptive代理
+        codeBuilder.append("\npublic class ").append(type.getSimpleName()).append("$Adaptive").append(" implements ").append(type.getCanonicalName()).append(" {");
+        // 一次处理给每个方法生成代理
+        for (Method method : methods) {
+            // methos 信息
+            Class<?> rt = method.getReturnType();
+            Class<?>[] pts = method.getParameterTypes();
+            Class<?>[] ets = method.getExceptionTypes();
+
+            Adaptive adaptiveAnnotation = method.getAnnotation(Adaptive.class);
+            StringBuilder code = new StringBuilder(512);
+
+            // 没有注解, 则抛出异常
+            if (adaptiveAnnotation == null) {
+                // 抛出异常的代码...不做代理
+                code.append("throw new UnsupportedOperationException(\"method ")
+                        .append(method.toString()).append(" of interface ")
+                        .append(type.getName()).append(" is not adaptive method!\");");
+            } else {
+
+                // URL 参数
+                int urlTypeIndex = -1;
+                for (int i = 0; i < pts.length; ++i) {
+                    if (pts[i].equals(URL.class)) {
+                        urlTypeIndex = i;
+                        break;
+                    }
+                }
+                // found parameter in URL type
+                if (urlTypeIndex != -1) {
+                    // Null Point check
+
+                    // if(arg%d == null) throw new IllegalArgumentException("url == null");
+                    String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"url == null\");",
+                            urlTypeIndex);
+                    code.append(s);
+
+                    // URL url = arg%d
+                    s = String.format("\n%s url = arg%d;", URL.class.getName(), urlTypeIndex);
+                    code.append(s);
+                }
+
+                // did not find parameter in URL type
+                // 没有URL 参数
+                else {
+                    //
+                    String attribMethod = null;
+
+                    // find URL getter method
+                    LBL_PTS:
+                    for (int i = 0; i < pts.length; ++i) {
+                        // 参数对象的包含方法 getURL()
+                        Method[] ms = pts[i].getMethods();
+                        for (Method m : ms) {
+                            String name = m.getName();
+                            if ((name.startsWith("get") || name.length() > 3)
+                                    && Modifier.isPublic(m.getModifiers())
+                                    && !Modifier.isStatic(m.getModifiers())
+                                    && m.getParameterTypes().length == 0
+                                    && m.getReturnType() == URL.class) {
+                                // 参数id
+                                urlTypeIndex = i;
+                                // getter
+                                attribMethod = name;
+                                break LBL_PTS;
+                            }
+                        }
+                    }
+
+                    // 必须有传递URL 的参数, 否则不能生成Adaptive的代理
+                    if (attribMethod == null) {
+                        throw new IllegalStateException("fail to create adaptive class for interface " + type.getName()
+                                + ": not found url parameter or url attribute in parameters of method " + method.getName());
+                    }
+
+                    // Null point check
+                    // if(arg%d == null) throw new IllegalArgumentException(" %s argument == null");
+                    String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"%s argument == null\");",
+                            urlTypeIndex, pts[urlTypeIndex].getName());
+                    code.append(s);
+                    // if(arg%d.%getUrl == null)
+                    s = String.format("\nif (arg%d.%s() == null) throw new IllegalArgumentException(\"%s argument %s() == null\");",
+                            urlTypeIndex, attribMethod, pts[urlTypeIndex].getName(), attribMethod);
+                    code.append(s);
+
+                    // URl = arg%d.getUrl()
+                    s = String.format("%s url = arg%d.%s();", URL.class.getName(), urlTypeIndex, attribMethod);
+                    code.append(s);
+                }
+
+                // 前面的逻辑是获取URL
+
+                // 确定URL中需要读取的参数
+                String[] value = adaptiveAnnotation.value();
+                // value is not set, use the value generated from class name as the key
+                // 默认的URL的参数名
+                if (value.length == 0) {
+                    char[] charArray = type.getSimpleName().toCharArray();
+                    StringBuilder sb = new StringBuilder(128);
+                    // WheelMaker
+                    for (int i = 0; i < charArray.length; i++) {
+                        if (Character.isUpperCase(charArray[i])) {
+                            if (i != 0) {
+                                sb.append(".");
+                            }
+                            sb.append(Character.toLowerCase(charArray[i]));
+                        } else {
+                            sb.append(charArray[i]);
+                        }
+                    }
+                    //wheel.maker
+                    value = new String[]{sb.toString()};
+                }
+
+
+                // Dubbo 设置的核心类
+                // 判断参数Invocation
+                boolean hasInvocation = false;
+                for (int i = 0; i < pts.length; ++i) {
+                    if (pts[i].getName().equals("com.alibaba.dubbo.rpc.Invocation")) {
+                        // Null Point check
+                        String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"invocation == null\");", i);
+                        code.append(s);
+                        s = String.format("\nString methodName = arg%d.getMethodName();", i);
+                        code.append(s);
+                        hasInvocation = true;
+                        break;
+                    }
+                }
+
+                //
+                // 默认的扩张Name
+                String defaultExtName = cachedDefaultName;
+                String getNameCode = null;
+                // Adaptive的所有值遍历处理,从后面遍历,
+                // 代码约定根据注解的顺序读取URL
+                for (int i = value.length - 1; i >= 0; --i) {
+                    // 最后一个value
+                    if (i == value.length - 1) {
+                        if (null != defaultExtName) {
+                            if (!"protocol".equals(value[i]))
+                                if (hasInvocation)
+                                    // Invocation
+                                    getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
+                                else
+                                    // 没有Incocation参数,则读取URL的参数
+                                    getNameCode = String.format("url.getParameter(\"%s\", \"%s\")", value[i], defaultExtName);
+                            else
+                                // 最后一个是协议:protocol
+                                getNameCode = String.format("( url.getProtocol() == null ? \"%s\" : url.getProtocol() )", defaultExtName);
+                        } else {
+                            //
+                            if (!"protocol".equals(value[i]))
+                                if (hasInvocation)
+                                    getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
+                                else
+                                    getNameCode = String.format("url.getParameter(\"%s\")", value[i]);
+                            else
+                                getNameCode = "url.getProtocol()";
+                        }
+                    } else {
+                        // 之前的value
+                        if (!"protocol".equals(value[i]))
+                            if (hasInvocation)
+                                getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
+                            else
+                                getNameCode = String.format("url.getParameter(\"%s\", %s)", value[i], getNameCode);
+                        else
+                            getNameCode = String.format("url.getProtocol() == null ? (%s) : url.getProtocol()", getNameCode);
+                    }
+                }
+
+                // 得到实际需要动态加载的扩展名
+                code.append("\nString extName = ").append(getNameCode).append(";");
+                // check extName == null?
+                String s = String.format("\nif(extName == null) " +
+                                "throw new IllegalStateException(\"Fail to get extension(%s) name from url(\" + url.toString() + \") use keys(%s)\");",
+                        type.getName(), Arrays.toString(value));
+                code.append(s);
+
+                // 加载指定的扩展
+                s = String.format("\n%s extension = (%<s)%s.getExtensionLoader(%s.class).getExtension(extName);",
+                        type.getName(), ExtensionLoader.class.getSimpleName(), type.getName());
+                code.append(s);
+
+                // return statement
+                if (!rt.equals(void.class)) {
+                    code.append("\nreturn ");
+                }
+
+                // return 有参数时
+                s = String.format("extension.%s(", method.getName());
+                code.append(s);
+                for (int i = 0; i < pts.length; i++) {
+                    if (i != 0)
+                        code.append(", ");
+                    code.append("arg").append(i);
+                }
+                code.append(");");
+            }
+
+            codeBuilder.append("\npublic ").append(rt.getCanonicalName()).append(" ").append(method.getName()).append("(");
+            for (int i = 0; i < pts.length; i++) {
+                if (i > 0) {
+                    codeBuilder.append(", ");
+                }
+                codeBuilder.append(pts[i].getCanonicalName());
+                codeBuilder.append(" ");
+                codeBuilder.append("arg").append(i);
+            }
+            codeBuilder.append(")");
+            // 参数有的异常继续抛出
+            if (ets.length > 0) {
+                codeBuilder.append(" throws ");
+                for (int i = 0; i < ets.length; i++) {
+                    if (i > 0) {
+                        codeBuilder.append(", ");
+                    }
+                    codeBuilder.append(ets[i].getCanonicalName());
+                }
+            }
+            codeBuilder.append(" {");
+            codeBuilder.append(code.toString());
+            codeBuilder.append("\n}");
+        }
+        codeBuilder.append("\n}");
+        if (logger.isDebugEnabled()) {
+            logger.debug(codeBuilder.toString());
+        }
+        return codeBuilder.toString();
+    }
+
+
+    // 4。========= 自启动逻辑
 
 
     public String getExtensionName(T extensionInstance) {
@@ -709,31 +1029,6 @@ public class ExtensionLoader<T> {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    public T getAdaptiveExtension() {
-        Object instance = cachedAdaptiveInstance.get();
-        if (instance == null) {
-            if (createAdaptiveInstanceError == null) {
-                synchronized (cachedAdaptiveInstance) {
-                    instance = cachedAdaptiveInstance.get();
-                    if (instance == null) {
-                        try {
-                            // @Adaptive
-                            instance = createAdaptiveExtension();
-                            cachedAdaptiveInstance.set(instance);
-                        } catch (Throwable t) {
-                            createAdaptiveInstanceError = t;
-                            throw new IllegalStateException("fail to create adaptive instance: " + t.toString(), t);
-                        }
-                    }
-                }
-            } else {
-                throw new IllegalStateException("fail to create adaptive instance: " + createAdaptiveInstanceError.toString(), createAdaptiveInstanceError);
-            }
-        }
-
-        return (T) instance;
-    }
 
     private IllegalStateException findException(String name) {
         for (Map.Entry<String, IllegalStateException> entry : exceptions.entrySet()) {
@@ -799,296 +1094,6 @@ public class ExtensionLoader<T> {
         return extension.value();
     }
 
-    @SuppressWarnings("unchecked")
-    private T createAdaptiveExtension() {
-        try {
-            // getAdaptiveExtensionClass
-            // 代理类的依赖注入
-            return injectExtension((T) getAdaptiveExtensionClass().newInstance());
-        } catch (Exception e) {
-            throw new IllegalStateException("Can not create adaptive extension " + type + ", cause: " + e.getMessage(), e);
-        }
-    }
-
-    private Class<?> getAdaptiveExtensionClass() {
-        getExtensionClasses();
-        if (cachedAdaptiveClass != null) {
-            // 如果注解在类上, 或是已经生成, 直接返回
-            return cachedAdaptiveClass;
-        }
-        //@Adaptive 注解的处理
-        return cachedAdaptiveClass = createAdaptiveExtensionClass();
-    }
-
-    // 创建Aaptive, 此处处理的的是@Adaptive 注解在方法上的
-    // 这种逻辑只适合注解在方法上
-    private Class<?> createAdaptiveExtensionClass() {
-        // 创建@Adaptive的class
-        String code = createAdaptiveExtensionClassCode();
-        ClassLoader classLoader = findClassLoader();
-        // 编译
-        com.alibaba.dubbo.common.compiler.Compiler compiler = ExtensionLoader.getExtensionLoader(com.alibaba.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
-        // 生成字节码
-        return compiler.compile(code, classLoader);
-    }
-
-    // 处理有Adaptie注解的接口
-    // 应该是通过代理实现的
-    // 总结下处理的方式
-    private String createAdaptiveExtensionClassCode() {
-        StringBuilder codeBuilder = new StringBuilder();
-        // Apative注解
-        Method[] methods = type.getMethods();
-        // 判断是否有Adaptive的方法注解
-        boolean hasAdaptiveAnnotation = false;
-        for (Method m : methods) {
-            if (m.isAnnotationPresent(Adaptive.class)) {
-                hasAdaptiveAnnotation = true;
-                break;
-            }
-        }
-        // no need to generate adaptive class since there's no adaptive method found.
-        if (!hasAdaptiveAnnotation)
-            throw new IllegalStateException("No adaptive method on extension " + type.getName() + ", refuse to create the adaptive class!");
-
-        // 使用代码编辑
-        // 同名package
-        codeBuilder.append("package ").append(type.getPackage().getName()).append(";");
-        // import ExtensionLoader
-        codeBuilder.append("\nimport ").append(ExtensionLoader.class.getName()).append(";");
-        // Adaptive代理
-        codeBuilder.append("\npublic class ").append(type.getSimpleName()).append("$Adaptive").append(" implements ").append(type.getCanonicalName()).append(" {");
-
-
-        // 一次处理给每个方法生成代理
-        for (Method method : methods) {
-            // methos 信息
-            Class<?> rt = method.getReturnType();
-            Class<?>[] pts = method.getParameterTypes();
-            Class<?>[] ets = method.getExceptionTypes();
-
-            Adaptive adaptiveAnnotation = method.getAnnotation(Adaptive.class);
-            StringBuilder code = new StringBuilder(512);
-
-            // 没有注解, 则抛出异常
-            if (adaptiveAnnotation == null) {
-                // 抛出异常的代码...不做代理
-                code.append("throw new UnsupportedOperationException(\"method ")
-                        .append(method.toString()).append(" of interface ")
-                        .append(type.getName()).append(" is not adaptive method!\");");
-            } else {
-
-                // URL 参数
-                int urlTypeIndex = -1;
-                for (int i = 0; i < pts.length; ++i) {
-                    if (pts[i].equals(URL.class)) {
-                        urlTypeIndex = i;
-                        break;
-                    }
-                }
-                // found parameter in URL type
-                if (urlTypeIndex != -1) {
-                    // Null Point check
-
-                    // if(arg%d == null) throw new IllegalArgumentException("url == null");
-                    String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"url == null\");",
-                            urlTypeIndex);
-                    code.append(s);
-
-                    // URL url = arg%d
-                    s = String.format("\n%s url = arg%d;", URL.class.getName(), urlTypeIndex);
-                    code.append(s);
-                }
-
-                // did not find parameter in URL type
-                // 没有URL 参数
-                else {
-                    //
-                    String attribMethod = null;
-
-                    // find URL getter method
-                    LBL_PTS:
-                    for (int i = 0; i < pts.length; ++i) {
-                        // 参数对象的包含方法 getURL()
-                        Method[] ms = pts[i].getMethods();
-                        for (Method m : ms) {
-                            String name = m.getName();
-                            if ((name.startsWith("get") || name.length() > 3)
-                                    && Modifier.isPublic(m.getModifiers())
-                                    && !Modifier.isStatic(m.getModifiers())
-                                    && m.getParameterTypes().length == 0
-                                    && m.getReturnType() == URL.class) {
-                                // 参数id
-                                urlTypeIndex = i;
-                                // getter
-                                attribMethod = name;
-                                break LBL_PTS;
-                            }
-                        }
-                    }
-
-                    // 必须有传递URL 的参数, 否则不能生成Adaptive的代理
-                    if (attribMethod == null) {
-                        throw new IllegalStateException("fail to create adaptive class for interface " + type.getName()
-                                + ": not found url parameter or url attribute in parameters of method " + method.getName());
-                    }
-
-                    // Null point check
-                    // if(arg%d == null) throw new IllegalArgumentException(" %s argument == null");
-                    String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"%s argument == null\");",
-                            urlTypeIndex, pts[urlTypeIndex].getName());
-                    code.append(s);
-                    // if(arg%d.%getUrl == null)
-                    s = String.format("\nif (arg%d.%s() == null) throw new IllegalArgumentException(\"%s argument %s() == null\");",
-                            urlTypeIndex, attribMethod, pts[urlTypeIndex].getName(), attribMethod);
-                    code.append(s);
-
-                    // URl = arg%d.getUrl()
-                    s = String.format("%s url = arg%d.%s();", URL.class.getName(), urlTypeIndex, attribMethod);
-                    code.append(s);
-                }
-
-                // 前面的逻辑是获取URL
-
-                // 确定URL中需要读取的参数
-                String[] value = adaptiveAnnotation.value();
-                // value is not set, use the value generated from class name as the key
-                // 默认的URL的参数名
-                if (value.length == 0) {
-                    char[] charArray = type.getSimpleName().toCharArray();
-                    StringBuilder sb = new StringBuilder(128);
-                    // WheelMaker
-                    for (int i = 0; i < charArray.length; i++) {
-                        if (Character.isUpperCase(charArray[i])) {
-                            if (i != 0) {
-                                sb.append(".");
-                            }
-                            sb.append(Character.toLowerCase(charArray[i]));
-                        } else {
-                            sb.append(charArray[i]);
-                        }
-                    }
-                    //wheel.maker
-                    value = new String[]{sb.toString()};
-                }
-
-
-                // Dubbo 设置的核心类
-                // 判断参数Invocation
-                boolean hasInvocation = false;
-                for (int i = 0; i < pts.length; ++i) {
-                    if (pts[i].getName().equals("com.alibaba.dubbo.rpc.Invocation")) {
-                        // Null Point check
-                        String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"invocation == null\");", i);
-                        code.append(s);
-                        s = String.format("\nString methodName = arg%d.getMethodName();", i);
-                        code.append(s);
-                        hasInvocation = true;
-                        break;
-                    }
-                }
-
-                //
-                // 默认的扩张Name
-                String defaultExtName = cachedDefaultName;
-                String getNameCode = null;
-                // Adaptive的所有值遍历处理,从后面遍历,
-                // 代码约定根据注解的顺序读取URL
-                for (int i = value.length - 1; i >= 0; --i) {
-                    // 最后一个value
-                    if (i == value.length - 1) {
-                        if (null != defaultExtName) {
-                            if (!"protocol".equals(value[i]))
-                                if (hasInvocation)
-                                    // Invocation
-                                    getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
-                                else
-                                    // 没有Incocation参数,则读取URL的参数
-                                    getNameCode = String.format("url.getParameter(\"%s\", \"%s\")", value[i], defaultExtName);
-                            else
-                                // 最后一个是协议:protocol
-                                getNameCode = String.format("( url.getProtocol() == null ? \"%s\" : url.getProtocol() )", defaultExtName);
-                        } else {
-                            //
-                            if (!"protocol".equals(value[i]))
-                                if (hasInvocation)
-                                    getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
-                                else
-                                    getNameCode = String.format("url.getParameter(\"%s\")", value[i]);
-                            else
-                                getNameCode = "url.getProtocol()";
-                        }
-                    } else {
-                        // 之前的value
-                        if (!"protocol".equals(value[i]))
-                            if (hasInvocation)
-                                getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
-                            else
-                                getNameCode = String.format("url.getParameter(\"%s\", %s)", value[i], getNameCode);
-                        else
-                            getNameCode = String.format("url.getProtocol() == null ? (%s) : url.getProtocol()", getNameCode);
-                    }
-                }
-
-                // 得到实际需要动态加载的扩展名
-                code.append("\nString extName = ").append(getNameCode).append(";");
-                // check extName == null?
-                String s = String.format("\nif(extName == null) " +
-                                "throw new IllegalStateException(\"Fail to get extension(%s) name from url(\" + url.toString() + \") use keys(%s)\");",
-                        type.getName(), Arrays.toString(value));
-                code.append(s);
-
-                // 加载指定的扩展
-                s = String.format("\n%s extension = (%<s)%s.getExtensionLoader(%s.class).getExtension(extName);",
-                        type.getName(), ExtensionLoader.class.getSimpleName(), type.getName());
-                code.append(s);
-
-                // return statement
-                if (!rt.equals(void.class)) {
-                    code.append("\nreturn ");
-                }
-
-                // return 有参数时
-                s = String.format("extension.%s(", method.getName());
-                code.append(s);
-                for (int i = 0; i < pts.length; i++) {
-                    if (i != 0)
-                        code.append(", ");
-                    code.append("arg").append(i);
-                }
-                code.append(");");
-            }
-
-            codeBuilder.append("\npublic ").append(rt.getCanonicalName()).append(" ").append(method.getName()).append("(");
-            for (int i = 0; i < pts.length; i++) {
-                if (i > 0) {
-                    codeBuilder.append(", ");
-                }
-                codeBuilder.append(pts[i].getCanonicalName());
-                codeBuilder.append(" ");
-                codeBuilder.append("arg").append(i);
-            }
-            codeBuilder.append(")");
-            // 参数有的异常继续抛出
-            if (ets.length > 0) {
-                codeBuilder.append(" throws ");
-                for (int i = 0; i < ets.length; i++) {
-                    if (i > 0) {
-                        codeBuilder.append(", ");
-                    }
-                    codeBuilder.append(ets[i].getCanonicalName());
-                }
-            }
-            codeBuilder.append(" {");
-            codeBuilder.append(code.toString());
-            codeBuilder.append("\n}");
-        }
-        codeBuilder.append("\n}");
-        if (logger.isDebugEnabled()) {
-            logger.debug(codeBuilder.toString());
-        }
-        return codeBuilder.toString();
-    }
 
     @Override
     public String toString() {

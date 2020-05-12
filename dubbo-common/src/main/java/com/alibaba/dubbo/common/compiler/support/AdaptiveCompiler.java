@@ -23,16 +23,20 @@ import com.alibaba.dubbo.common.extension.ExtensionLoader;
 
 /**
  * AdaptiveCompiler. (SPI, Singleton, ThreadSafe)
+ * <p>
+ * 自适应实现是直接写的，不是通过编译的
  */
 @Adaptive
 public class AdaptiveCompiler implements Compiler {
 
     private static volatile String DEFAULT_COMPILER;
 
+    // 默认实现通过@SPI指定
     public static void setDefaultCompiler(String compiler) {
         DEFAULT_COMPILER = compiler;
     }
 
+    // 自适应的代理逻辑
     @Override
     public Class<?> compile(String code, ClassLoader classLoader) {
         Compiler compiler;
@@ -45,5 +49,6 @@ public class AdaptiveCompiler implements Compiler {
         }
         return compiler.compile(code, classLoader);
     }
+
 
 }
