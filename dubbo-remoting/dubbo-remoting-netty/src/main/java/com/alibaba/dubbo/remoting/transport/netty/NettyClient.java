@@ -53,6 +53,7 @@ public class NettyClient extends AbstractClient {
             Constants.DEFAULT_IO_THREADS);
     private ClientBootstrap bootstrap;
 
+    // netty
     private volatile Channel channel; // volatile, please copy reference to use
 
     public NettyClient(final URL url, final ChannelHandler handler) throws RemotingException {
@@ -154,11 +155,13 @@ public class NettyClient extends AbstractClient {
         }*/
     }
 
+    // dubbo - channel
     @Override
     protected com.alibaba.dubbo.remoting.Channel getChannel() {
         Channel c = channel;
         if (c == null || !c.isConnected())
             return null;
+        //
         return NettyChannel.getOrAddChannel(c, getUrl(), this);
     }
 

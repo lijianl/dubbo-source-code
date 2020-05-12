@@ -69,7 +69,9 @@ public class MockClusterInvoker<T> implements Invoker<T> {
     public Result invoke(Invocation invocation) throws RpcException {
         Result result = null;
 
-        String value = directory.getUrl().getMethodParameter(invocation.getMethodName(), Constants.MOCK_KEY, Boolean.FALSE.toString()).trim();
+        // mock 默认 = false
+        String value = directory.getUrl()
+                .getMethodParameter(invocation.getMethodName(), Constants.MOCK_KEY, Boolean.FALSE.toString()).trim();
         if (value.length() == 0 || value.equalsIgnoreCase("false")) {
             //no mock
             result = this.invoker.invoke(invocation);
@@ -77,6 +79,7 @@ public class MockClusterInvoker<T> implements Invoker<T> {
             if (logger.isWarnEnabled()) {
                 logger.info("force-mock: " + invocation.getMethodName() + " force-mock enabled , url : " + directory.getUrl());
             }
+            // force:xxx 直接执行 mock 逻辑，不发起远程调用
             //force:direct mock
             result = doMockInvoke(invocation, null);
         } else {
@@ -90,6 +93,7 @@ public class MockClusterInvoker<T> implements Invoker<T> {
                     if (logger.isWarnEnabled()) {
                         logger.warn("fail-mock: " + invocation.getMethodName() + " fail-mock enabled , url : " + directory.getUrl(), e);
                     }
+                    // 这个是服务的降级逻辑???
                     result = doMockInvoke(invocation, e);
                 }
             }

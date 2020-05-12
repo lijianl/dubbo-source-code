@@ -60,10 +60,8 @@ public class ExtensionLoader<T> {
 
     private static final Logger logger = LoggerFactory.getLogger(ExtensionLoader.class);
 
-    private static final String SERVICES_DIRECTORY = "META-INF/services/";
-
     private static final String DUBBO_DIRECTORY = "META-INF/dubbo/";
-
+    private static final String SERVICES_DIRECTORY = "META-INF/services/";
     private static final String DUBBO_INTERNAL_DIRECTORY = DUBBO_DIRECTORY + "internal/";
 
     private static final Pattern NAME_SEPARATOR = Pattern.compile("\\s*[,]+\\s*");
@@ -345,6 +343,7 @@ public class ExtensionLoader<T> {
         // 所有的实例都是单例的实现
         Object instance = holder.get();
         if (instance == null) {
+            // 避免了install == null的情况
             synchronized (holder) {
                 instance = holder.get();
                 if (instance == null) {
@@ -544,6 +543,7 @@ public class ExtensionLoader<T> {
             if (instance == null) {
                 // 实例是原型的;不是单例类型的
                 // 使用默认构造函数创建
+                // 控制全局的单例
                 EXTENSION_INSTANCES.putIfAbsent(clazz, clazz.newInstance());
                 instance = (T) EXTENSION_INSTANCES.get(clazz);
             }

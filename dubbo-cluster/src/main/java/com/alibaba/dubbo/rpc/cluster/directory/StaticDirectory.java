@@ -26,10 +26,10 @@ import java.util.List;
 
 /**
  * StaticDirectory
- *
  */
 public class StaticDirectory<T> extends AbstractDirectory<T> {
 
+    //
     private final List<Invoker<T>> invokers;
 
     public StaticDirectory(List<Invoker<T>> invokers) {
@@ -56,6 +56,7 @@ public class StaticDirectory<T> extends AbstractDirectory<T> {
         return invokers.get(0).getInterface();
     }
 
+    // 检查服务是否可用
     @Override
     public boolean isAvailable() {
         if (isDestroyed()) {

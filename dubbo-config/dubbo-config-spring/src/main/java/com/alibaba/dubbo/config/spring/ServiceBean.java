@@ -58,6 +58,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
 
     private transient String beanName;
 
+    //
     private transient boolean supportedApplicationListener;
 
     public ServiceBean() {
@@ -74,6 +75,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         return SPRING_CONTEXT;
     }
 
+    // 判断spring 是否支持 ApplicationListener
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
@@ -114,22 +116,36 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         return service;
     }
 
+
+    // ContextRefreshedEvent 监听spring的上下问刷新时间
+    // 监听到刷新的事件时, 添加dubbo的服务导出逻辑
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
+
+        // 延迟导出 && 已经导出 && 取消导出
         if (isDelay() && !isExported() && !isUnexported()) {
             if (logger.isInfoEnabled()) {
                 logger.info("The service ready on spring started. service: " + getInterface());
             }
+            // 导出服务
+            // 如果已经延迟; 查看延迟导出的地方
             export();
         }
     }
 
+    // true : 不需要延迟; false = 需要延迟
+    // 函数返回值需要确认下
     private boolean isDelay() {
+        // 这里的应该时<service的配置
         Integer delay = getDelay();
         ProviderConfig provider = getProvider();
         if (delay == null && provider != null) {
+            // 没有的话检查<provider
             delay = provider.getDelay();
         }
+        // 判断delay
+        // spring是否支持ApplicationListener
+        // ??? 这块逻辑没懂
         return supportedApplicationListener && (delay == null || delay == -1);
     }
 

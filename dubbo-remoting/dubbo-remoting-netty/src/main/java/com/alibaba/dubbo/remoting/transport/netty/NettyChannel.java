@@ -38,6 +38,7 @@ final class NettyChannel extends AbstractChannel {
 
     private static final Logger logger = LoggerFactory.getLogger(NettyChannel.class);
 
+    // 尼玛
     private static final ConcurrentMap<org.jboss.netty.channel.Channel, NettyChannel> channelMap = new ConcurrentHashMap<org.jboss.netty.channel.Channel, NettyChannel>();
 
     private final org.jboss.netty.channel.Channel channel;
@@ -58,6 +59,7 @@ final class NettyChannel extends AbstractChannel {
         }
         NettyChannel ret = channelMap.get(ch);
         if (ret == null) {
+            // 使用nettyChannel 构建 DubboChannel
             NettyChannel nc = new NettyChannel(ch, url, handler);
             if (ch.isConnected()) {
                 ret = channelMap.putIfAbsent(ch, nc);
@@ -92,14 +94,16 @@ final class NettyChannel extends AbstractChannel {
 
     @Override
     public void send(Object message, boolean sent) throws RemotingException {
-        super.send(message, sent);
 
+        super.send(message, sent);
         boolean success = true;
         int timeout = 0;
         try {
             ChannelFuture future = channel.write(message);
+            // 这个代码真是没有看出来
             if (sent) {
                 timeout = getUrl().getPositiveParameter(Constants.TIMEOUT_KEY, Constants.DEFAULT_TIMEOUT);
+                // await
                 success = future.await(timeout);
             }
             Throwable cause = future.getCause();

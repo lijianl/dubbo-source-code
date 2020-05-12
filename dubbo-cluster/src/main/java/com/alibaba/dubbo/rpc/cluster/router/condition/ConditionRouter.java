@@ -57,12 +57,17 @@ public class ConditionRouter implements Router, Comparable<Router> {
         this.priority = url.getParameter(Constants.PRIORITY_KEY, 0);
         this.force = url.getParameter(Constants.FORCE_KEY, false);
         try {
+            // 获取路由配置...
             String rule = url.getParameterAndDecoded(Constants.RULE_KEY);
             if (rule == null || rule.trim().length() == 0) {
                 throw new IllegalArgumentException("Illegal route rule!");
             }
+
             rule = rule.replace("consumer.", "").replace("provider.", "");
             int i = rule.indexOf("=>");
+
+
+            //
             String whenRule = i < 0 ? null : rule.substring(0, i).trim();
             String thenRule = i < 0 ? rule.trim() : rule.substring(i + 2).trim();
             Map<String, MatchPair> when = StringUtils.isBlank(whenRule) || "true".equals(whenRule) ? new HashMap<String, MatchPair>() : parseRule(whenRule);
@@ -85,7 +90,11 @@ public class ConditionRouter implements Router, Comparable<Router> {
         MatchPair pair = null;
         // Multiple values
         Set<String> values = null;
+
         final Matcher matcher = ROUTE_PATTERN.matcher(rule);
+
+
+        // 根据 pattern解析匹配的结果
         while (matcher.find()) { // Try to match one by one
             String separator = matcher.group(1);
             String content = matcher.group(2);
@@ -230,7 +239,9 @@ public class ConditionRouter implements Router, Comparable<Router> {
     }
 
     private static final class MatchPair {
+        // 匹配
         final Set<String> matches = new HashSet<String>();
+        // 不匹配
         final Set<String> mismatches = new HashSet<String>();
 
         private boolean isMatch(String value, URL param) {

@@ -68,8 +68,10 @@ public class DefaultFuture implements ResponseFuture {
     public DefaultFuture(Channel channel, Request request, int timeout) {
         this.channel = channel;
         this.request = request;
+        // 请求ID
         this.id = request.getId();
         this.timeout = timeout > 0 ? timeout : channel.getUrl().getPositiveParameter(Constants.TIMEOUT_KEY, Constants.DEFAULT_TIMEOUT);
+
         // put into waiting map.
         FUTURES.put(id, this);
         CHANNELS.put(id, channel);

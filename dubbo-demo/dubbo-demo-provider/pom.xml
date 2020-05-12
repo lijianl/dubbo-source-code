@@ -47,17 +47,39 @@
             <groupId>com.alibaba</groupId>
             <artifactId>dubbo-registry-multicast</artifactId>
         </dependency>
+
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>dubbo-rpc-dubbo</artifactId>
         </dependency>
+
+
+        <!--尼玛这么坑-->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>dubbo-rpc-hessian</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>dubbo-remoting-netty</artifactId>
         </dependency>
+
+
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>dubbo-remoting-http</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>dubbo-serialization-hessian2</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>dubbo-serialization-jdk</artifactId>
+        </dependency>
+
     </dependencies>
 </project>

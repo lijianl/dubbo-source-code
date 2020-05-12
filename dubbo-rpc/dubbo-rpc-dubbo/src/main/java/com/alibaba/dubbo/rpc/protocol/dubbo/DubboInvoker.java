@@ -66,15 +66,18 @@ public class DubboInvoker<T> extends AbstractInvoker<T> {
 
     @Override
     protected Result doInvoke(final Invocation invocation) throws Throwable {
+
         RpcInvocation inv = (RpcInvocation) invocation;
+
         final String methodName = RpcUtils.getMethodName(invocation);
         inv.setAttachment(Constants.PATH_KEY, getUrl().getPath());
         inv.setAttachment(Constants.VERSION_KEY, version);
-
         ExchangeClient currentClient;
+
         if (clients.length == 1) {
             currentClient = clients[0];
         } else {
+            // 记数 + 轮训
             currentClient = clients[index.getAndIncrement() % clients.length];
         }
         try {
@@ -82,15 +85,26 @@ public class DubboInvoker<T> extends AbstractInvoker<T> {
             boolean isOneway = RpcUtils.isOneway(getUrl(), invocation);
             int timeout = getUrl().getMethodParameter(methodName, Constants.TIMEOUT_KEY, Constants.DEFAULT_TIMEOUT);
             if (isOneway) {
+                // 异步无返回
                 boolean isSent = getUrl().getMethodParameter(methodName, Constants.SENT_KEY, false);
+
+                // send
                 currentClient.send(inv, isSent);
                 RpcContext.getContext().setFuture(null);
+                // 返回空
                 return new RpcResult();
+
             } else if (isAsync) {
+
+                // 异步有返回:request
                 ResponseFuture future = currentClient.request(inv, timeout);
+                // 用户自己调用Future
                 RpcContext.getContext().setFuture(new FutureAdapter<Object>(future));
                 return new RpcResult();
+
             } else {
+                // 同步
+                // 同步调用Future的get  => 没有超时
                 RpcContext.getContext().setFuture(null);
                 return (Result) currentClient.request(inv, timeout).get();
             }

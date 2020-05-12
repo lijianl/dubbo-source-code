@@ -16,8 +16,12 @@
  */
 package com.alibaba.dubbo.demo;
 
+import java.io.File;
+import java.io.InputStream;
+
 public interface DemoService {
 
     String sayHello(String name);
 
+    String readFile(InputStream inputStream);
 }

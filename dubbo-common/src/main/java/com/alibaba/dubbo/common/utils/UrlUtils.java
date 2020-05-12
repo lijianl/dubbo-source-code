@@ -52,8 +52,10 @@ public class UrlUtils {
         if (defaultProtocol == null || defaultProtocol.length() == 0) {
             defaultProtocol = "dubbo";
         }
+        // 用户名 / 密码
         String defaultUsername = defaults == null ? null : defaults.get("username");
         String defaultPassword = defaults == null ? null : defaults.get("password");
+
         int defaultPort = StringUtils.parseInteger(defaults == null ? null : defaults.get("port"));
         String defaultPath = defaults == null ? null : defaults.get("path");
         Map<String, String> defaultParameters = defaults == null ? null : new HashMap<String, String>(defaults);
@@ -128,12 +130,15 @@ public class UrlUtils {
         if (address == null || address.length() == 0) {
             return null;
         }
+        // 把某个注册集群的所有机器拆分
         String[] addresses = Constants.REGISTRY_SPLIT_PATTERN.split(address);
         if (addresses == null || addresses.length == 0) {
             return null; //here won't be empty
         }
+        //
         List<URL> registries = new ArrayList<URL>();
         for (String addr : addresses) {
+            // 使用参数和地址
             registries.add(parseURL(addr, defaults));
         }
         return registries;

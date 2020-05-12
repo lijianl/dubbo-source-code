@@ -40,6 +40,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * DefaultMessageClient
  */
+
+// 心跳监测: hearbeat
 public class HeaderExchangeClient implements ExchangeClient {
 
     private static final Logger logger = LoggerFactory.getLogger(HeaderExchangeClient.class);
@@ -53,18 +55,23 @@ public class HeaderExchangeClient implements ExchangeClient {
     private int heartbeat;
     private int heartbeatTimeout;
 
+    // header
     public HeaderExchangeClient(Client client, boolean needHeartbeat) {
         if (client == null) {
             throw new IllegalArgumentException("client == null");
         }
         this.client = client;
+        // 又封装了一层
         this.channel = new HeaderExchangeChannel(client);
+
+        // 心跳监测
         String dubbo = client.getUrl().getParameter(Constants.DUBBO_VERSION_KEY);
         this.heartbeat = client.getUrl().getParameter(Constants.HEARTBEAT_KEY, dubbo != null && dubbo.startsWith("1.0.") ? Constants.DEFAULT_HEARTBEAT : 0);
         this.heartbeatTimeout = client.getUrl().getParameter(Constants.HEARTBEAT_TIMEOUT_KEY, heartbeat * 3);
         if (heartbeatTimeout < heartbeat * 2) {
             throw new IllegalStateException("heartbeatTimeout < heartbeatInterval * 2");
         }
+        // 心跳监测
         if (needHeartbeat) {
             startHeartbeatTimer();
         }
@@ -180,6 +187,8 @@ public class HeaderExchangeClient implements ExchangeClient {
         return channel.hasAttribute(key);
     }
 
+
+    // 启动心跳监测
     private void startHeartbeatTimer() {
         stopHeartbeatTimer();
         if (heartbeat > 0) {
