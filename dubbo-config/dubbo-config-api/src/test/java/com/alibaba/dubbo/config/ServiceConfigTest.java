@@ -51,6 +51,7 @@ import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.withSettings;
 
 public class ServiceConfigTest {
+
     private Protocol protocolDelegate = Mockito.mock(Protocol.class);
     private Registry registryDelegate = Mockito.mock(Registry.class);
     private Exporter exporter = Mockito.mock(Exporter.class);

@@ -16,13 +16,7 @@
  */
 package com.alibaba.dubbo.config.spring;
 
-import com.alibaba.dubbo.config.ApplicationConfig;
-import com.alibaba.dubbo.config.ModuleConfig;
-import com.alibaba.dubbo.config.MonitorConfig;
-import com.alibaba.dubbo.config.ProtocolConfig;
-import com.alibaba.dubbo.config.ProviderConfig;
-import com.alibaba.dubbo.config.RegistryConfig;
-import com.alibaba.dubbo.config.ServiceConfig;
+import com.alibaba.dubbo.config.*;
 import com.alibaba.dubbo.config.annotation.Service;
 import com.alibaba.dubbo.config.spring.extension.SpringExtensionFactory;
 import org.springframework.aop.support.AopUtils;
@@ -46,20 +40,23 @@ import java.util.Map;
  *
  * @export
  */
-public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean, DisposableBean, ApplicationContextAware, ApplicationListener<ContextRefreshedEvent>, BeanNameAware {
+public class ServiceBean<T>
+        extends ServiceConfig<T>
+        implements InitializingBean,
+        DisposableBean,
+        ApplicationContextAware,
+        ApplicationListener<ContextRefreshedEvent>,
+        BeanNameAware {
 
     private static final long serialVersionUID = 213195494150089726L;
 
     private static transient ApplicationContext SPRING_CONTEXT;
+    private transient ApplicationContext applicationContext;
+    private transient boolean supportedApplicationListener;
+
 
     private final transient Service service;
-
-    private transient ApplicationContext applicationContext;
-
     private transient String beanName;
-
-    //
-    private transient boolean supportedApplicationListener;
 
     public ServiceBean() {
         super();
@@ -75,7 +72,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         return SPRING_CONTEXT;
     }
 
-    // 判断spring 是否支持 ApplicationListener
+    //spring是否支持 ApplicationListener
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
@@ -85,6 +82,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
             try {
                 Method method = applicationContext.getClass().getMethod("addApplicationListener", new Class<?>[]{ApplicationListener.class}); // backward compatibility to spring 2.0.1
                 method.invoke(applicationContext, new Object[]{this});
+                // init-flag
                 supportedApplicationListener = true;
             } catch (Throwable t) {
                 if (applicationContext instanceof AbstractApplicationContext) {
@@ -117,35 +115,41 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
     }
 
 
-    // ContextRefreshedEvent 监听spring的上下问刷新时间
-    // 监听到刷新的事件时, 添加dubbo的服务导出逻辑
+    // ===========1.  ContextRefreshedEvent监听spring的ContextRefreshedEvent
+    // 1. 监听到刷新的事件时, 添加dubbo的服务导出逻辑{@link ServiceBean};{@link ReferenceBean}
+    // 2. 启动/关闭,Dubbo,{@link DubboApplicationListener}
+    // 3. 触发Spring 上下文刷新事件 {@link SpringContainer}
+
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
-
-        // 延迟导出 && 已经导出 && 取消导出
-        if (isDelay() && !isExported() && !isUnexported()) {
+        // 不需要延迟导出 && 已经导出 && 取消导出
+        if (isDelay()
+                && !isExported()
+                && !isUnexported()) {
             if (logger.isInfoEnabled()) {
                 logger.info("The service ready on spring started. service: " + getInterface());
             }
             // 导出服务
             // 如果已经延迟; 查看延迟导出的地方
+
+            // 解析配置到URL
+            // 启动netty
+            // 注册zk
             export();
         }
     }
 
-    // true : 不需要延迟; false = 需要延迟
-    // 函数返回值需要确认下
+    // 当方法返回 true 时，表示无需延迟导出。返回 false 时，表示需要延迟导出
     private boolean isDelay() {
-        // 这里的应该时<service的配置
+        // 这里的应该时<service>的配置
         Integer delay = getDelay();
         ProviderConfig provider = getProvider();
         if (delay == null && provider != null) {
-            // 没有的话检查<provider
+            // <provider>
             delay = provider.getDelay();
         }
         // 判断delay
         // spring是否支持ApplicationListener
-        // ??? 这块逻辑没懂
         return supportedApplicationListener && (delay == null || delay == -1);
     }
 

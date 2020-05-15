@@ -130,12 +130,11 @@ public class UrlUtils {
         if (address == null || address.length() == 0) {
             return null;
         }
-        // 把某个注册集群的所有机器拆分
+        // 把某个注册集群的所有机器拆分 => ;
         String[] addresses = Constants.REGISTRY_SPLIT_PATTERN.split(address);
         if (addresses == null || addresses.length == 0) {
             return null; //here won't be empty
         }
-        //
         List<URL> registries = new ArrayList<URL>();
         for (String addr : addresses) {
             // 使用参数和地址

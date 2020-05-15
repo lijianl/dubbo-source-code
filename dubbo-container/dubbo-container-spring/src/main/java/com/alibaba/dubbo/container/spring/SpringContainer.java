@@ -20,18 +20,24 @@ import com.alibaba.dubbo.common.logger.Logger;
 import com.alibaba.dubbo.common.logger.LoggerFactory;
 import com.alibaba.dubbo.common.utils.ConfigUtils;
 import com.alibaba.dubbo.container.Container;
-
 import org.apache.dubbo.config.spring.initializer.DubboApplicationListener;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 /**
  * SpringContainer. (SPI, Singleton, ThreadSafe)
+ * <p>
+ * <p>
+ * Dubbo启动类
  */
 public class SpringContainer implements Container {
 
     public static final String SPRING_CONFIG = "dubbo.spring.config";
+    // dubbo-配置文件
+    //
     public static final String DEFAULT_SPRING_CONFIG = "classpath*:META-INF/spring/*.xml";
     private static final Logger logger = LoggerFactory.getLogger(SpringContainer.class);
+
+    // static
     static ClassPathXmlApplicationContext context;
 
     public static ClassPathXmlApplicationContext getContext() {
@@ -44,9 +50,15 @@ public class SpringContainer implements Container {
         if (configPath == null || configPath.length() == 0) {
             configPath = DEFAULT_SPRING_CONFIG;
         }
+        // 跟Spring不同的就是加载了duboo的XML配置
+        // 这里关闭的了刷新=>默认是开启的
         context = new ClassPathXmlApplicationContext(configPath.split("[,\\s]+"), false);
+        // 1. 添加启动DubboContainer,监听启动事件
         context.addApplicationListener(new DubboApplicationListener());
         context.registerShutdownHook();
+        // 触发刷新=>启动dubbo,启动服务注册
+        // 2. 这个是需要的=>触发监听
+        // this.finishRefresh();
         context.refresh();
         context.start();
     }

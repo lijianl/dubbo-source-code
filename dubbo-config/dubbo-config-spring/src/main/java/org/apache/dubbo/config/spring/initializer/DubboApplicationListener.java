@@ -38,11 +38,15 @@ public class DubboApplicationListener implements ApplicationListener<Application
         this.dubboBootstrap = dubboBootstrap;
     }
 
+    // spring-自己的context的刷新事件,spring自己的触发
     @Override
     public void onApplicationEvent(ApplicationEvent applicationEvent) {
+        // 启动
         if (applicationEvent instanceof ContextRefreshedEvent) {
+            // 启动
             dubboBootstrap.start();
         } else if (applicationEvent instanceof ContextClosedEvent) {
+            // 关闭
             dubboBootstrap.stop();
         }
     }

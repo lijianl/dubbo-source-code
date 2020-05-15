@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class StaticDirectory<T> extends AbstractDirectory<T> {
 
-    //
+    // 所有的invoker
     private final List<Invoker<T>> invokers;
 
     public StaticDirectory(List<Invoker<T>> invokers) {
@@ -62,6 +62,7 @@ public class StaticDirectory<T> extends AbstractDirectory<T> {
         if (isDestroyed()) {
             return false;
         }
+        // 每个都检查
         for (Invoker<T> invoker : invokers) {
             if (invoker.isAvailable()) {
                 return true;

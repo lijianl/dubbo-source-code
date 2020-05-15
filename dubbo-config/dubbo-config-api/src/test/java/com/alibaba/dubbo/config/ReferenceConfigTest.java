@@ -19,7 +19,6 @@ package com.alibaba.dubbo.config;
 import com.alibaba.dubbo.common.Constants;
 import com.alibaba.dubbo.config.api.DemoService;
 import com.alibaba.dubbo.config.provider.impl.DemoServiceImpl;
-
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -31,7 +30,8 @@ public class ReferenceConfigTest {
         application.setName("test-protocol-random-port");
 
         RegistryConfig registry = new RegistryConfig();
-        registry.setAddress("multicast://224.5.6.7:1234");
+        // registry.setAddress("multicast://224.5.6.7:1234");
+        registry.setAddress("zookeeper://127.0.0.1:2181");
 
         ProtocolConfig protocol = new ProtocolConfig();
         protocol.setName("dubbo");
@@ -44,14 +44,18 @@ public class ReferenceConfigTest {
         demoService.setRegistry(registry);
         demoService.setProtocol(protocol);
 
+        // 这样debug
         ReferenceConfig<DemoService> rc = new ReferenceConfig<DemoService>();
         rc.setApplication(application);
         rc.setRegistry(registry);
         rc.setInterface(DemoService.class.getName());
+        rc.setConnections(2);
         rc.setInjvm(false);
 
         try {
-            demoService.export();
+            // export
+            // demoService.export();
+            // get
             rc.get();
             Assert.assertTrue(!Constants.LOCAL_PROTOCOL.equalsIgnoreCase(
                     rc.getInvoker().getUrl().getProtocol()));

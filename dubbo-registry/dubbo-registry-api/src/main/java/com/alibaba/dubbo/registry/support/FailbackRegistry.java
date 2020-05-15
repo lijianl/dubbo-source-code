@@ -129,6 +129,8 @@ public abstract class FailbackRegistry extends AbstractRegistry {
 
     @Override
     public void register(URL url) {
+
+
         super.register(url);
         failedRegistered.remove(url);
         failedUnregistered.remove(url);

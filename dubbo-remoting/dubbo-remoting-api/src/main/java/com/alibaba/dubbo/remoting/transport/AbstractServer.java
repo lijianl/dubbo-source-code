@@ -49,6 +49,7 @@ public abstract class AbstractServer extends AbstractEndpoint implements Server 
 
     public AbstractServer(URL url, ChannelHandler handler) throws RemotingException {
         super(url, handler);
+        // 报漏地址
         localAddress = getUrl().toInetSocketAddress();
 
         String bindIp = getUrl().getParameter(Constants.BIND_IP_KEY, getUrl().getHost());
@@ -56,10 +57,12 @@ public abstract class AbstractServer extends AbstractEndpoint implements Server 
         if (url.getParameter(Constants.ANYHOST_KEY, false) || NetUtils.isInvalidLocalHost(bindIp)) {
             bindIp = NetUtils.ANYHOST;
         }
+
         bindAddress = new InetSocketAddress(bindIp, bindPort);
         this.accepts = url.getParameter(Constants.ACCEPTS_KEY, Constants.DEFAULT_ACCEPTS);
         this.idleTimeout = url.getParameter(Constants.IDLE_TIMEOUT_KEY, Constants.DEFAULT_IDLE_TIMEOUT);
         try {
+            // 启动server
             doOpen();
             if (logger.isInfoEnabled()) {
                 logger.info("Start " + getClass().getSimpleName() + " bind " + getBindAddress() + ", export " + getLocalAddress());

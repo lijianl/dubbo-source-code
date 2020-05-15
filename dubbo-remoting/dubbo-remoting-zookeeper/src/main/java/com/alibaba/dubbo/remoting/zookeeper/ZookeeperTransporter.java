@@ -21,9 +21,13 @@ import com.alibaba.dubbo.common.URL;
 import com.alibaba.dubbo.common.extension.Adaptive;
 import com.alibaba.dubbo.common.extension.SPI;
 
+
+// 默认客户端
 @SPI("curator")
 public interface ZookeeperTransporter {
 
+    // zkclient=com.alibaba.dubbo.remoting.zookeeper.zkclient.ZkclientZookeeperTransporter
+    //curator=com.alibaba.dubbo.remoting.zookeeper.curator.CuratorZookeeperTransporter
     @Adaptive({Constants.CLIENT_KEY, Constants.TRANSPORTER_KEY})
     ZookeeperClient connect(URL url);
 

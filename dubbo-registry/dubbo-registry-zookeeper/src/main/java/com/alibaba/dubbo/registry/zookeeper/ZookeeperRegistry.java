@@ -38,7 +38,6 @@ import java.util.concurrent.ConcurrentMap;
 
 /**
  * ZookeeperRegistry
- *
  */
 public class ZookeeperRegistry extends FailbackRegistry {
 
@@ -61,12 +60,18 @@ public class ZookeeperRegistry extends FailbackRegistry {
         if (url.isAnyHost()) {
             throw new IllegalStateException("registry address == null");
         }
+        // 注册根目录
         String group = url.getParameter(Constants.GROUP_KEY, DEFAULT_ROOT);
         if (!group.startsWith(Constants.PATH_SEPARATOR)) {
             group = Constants.PATH_SEPARATOR + group;
         }
+
+        //
         this.root = group;
+
+        // zkLCint
         zkClient = zookeeperTransporter.connect(url);
+        //监听
         zkClient.addStateListener(new StateListener() {
             @Override
             public void stateChanged(int state) {
@@ -111,6 +116,7 @@ public class ZookeeperRegistry extends FailbackRegistry {
     @Override
     protected void doRegister(URL url) {
         try {
+            // 节点node
             zkClient.create(toUrlPath(url), url.getParameter(Constants.DYNAMIC_KEY, true));
         } catch (Throwable e) {
             throw new RpcException("Failed to register " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);

@@ -36,26 +36,26 @@ import java.util.concurrent.locks.ReentrantLock;
 public class Main {
 
     public static final String CONTAINER_KEY = "dubbo.container";
-
     public static final String SHUTDOWN_HOOK_KEY = "dubbo.shutdown.hook";
 
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
     private static final ExtensionLoader<Container> loader = ExtensionLoader.getExtensionLoader(Container.class);
-
     private static final ReentrantLock LOCK = new ReentrantLock();
-
     private static final Condition STOP = LOCK.newCondition();
 
     public static void main(String[] args) {
         try {
             if (args == null || args.length == 0) {
+                // @SPI("spring")
                 String config = ConfigUtils.getProperty(CONTAINER_KEY, loader.getDefaultExtensionName());
+                // 只有SpringContainer
                 args = Constants.COMMA_SPLIT_PATTERN.split(config);
             }
 
             final List<Container> containers = new ArrayList<Container>();
             for (int i = 0; i < args.length; i++) {
+                // 默认true
                 containers.add(loader.getExtension(args[i]));
             }
             logger.info("Use container type(" + Arrays.toString(args) + ") to run dubbo serivce.");
@@ -66,6 +66,8 @@ public class Main {
                     public void run() {
                         for (Container container : containers) {
                             try {
+                                // 关闭所有container
+                                // spring/dubbo
                                 container.stop();
                                 logger.info("Dubbo " + container.getClass().getSimpleName() + " stopped!");
                             } catch (Throwable t) {

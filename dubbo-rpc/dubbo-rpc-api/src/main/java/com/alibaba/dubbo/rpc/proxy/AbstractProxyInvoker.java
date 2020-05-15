@@ -17,11 +17,7 @@
 package com.alibaba.dubbo.rpc.proxy;
 
 import com.alibaba.dubbo.common.URL;
-import com.alibaba.dubbo.rpc.Invocation;
-import com.alibaba.dubbo.rpc.Invoker;
-import com.alibaba.dubbo.rpc.Result;
-import com.alibaba.dubbo.rpc.RpcException;
-import com.alibaba.dubbo.rpc.RpcResult;
+import com.alibaba.dubbo.rpc.*;
 
 import java.lang.reflect.InvocationTargetException;
 
@@ -73,6 +69,8 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
         try {
+            // 模版doInvoke()
+            // 调用结果RpcResult
             return new RpcResult(doInvoke(proxy, invocation.getMethodName(), invocation.getParameterTypes(), invocation.getArguments()));
         } catch (InvocationTargetException e) {
             return new RpcResult(e.getTargetException());

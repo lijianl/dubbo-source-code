@@ -59,9 +59,11 @@ public class DubboBootstrap {
 
     /**
      * Register service config to bootstrap, which will be called during {@link DubboBootstrap#stop()}
+     *
      * @param serviceConfig the service
      * @return the bootstrap instance
      */
+    // 什么时候注册的
     public DubboBootstrap registerServiceConfig(ServiceConfig serviceConfig) {
         serviceConfigList.add(serviceConfig);
         return this;
@@ -75,13 +77,15 @@ public class DubboBootstrap {
             // we need to remove it explicitly
             removeShutdownHook();
         }
-        for (ServiceConfig serviceConfig: serviceConfigList) {
+        for (ServiceConfig serviceConfig : serviceConfigList) {
+            // 遍历导出每个<service => serviceConfig
             serviceConfig.export();
         }
     }
 
     public void stop() {
-        for (ServiceConfig serviceConfig: serviceConfigList) {
+        for (ServiceConfig serviceConfig : serviceConfigList) {
+            // 服务不导出
             serviceConfig.unexport();
         }
         shutdownHook.destroyAll();
@@ -103,8 +107,7 @@ public class DubboBootstrap {
     public void removeShutdownHook() {
         try {
             Runtime.getRuntime().removeShutdownHook(shutdownHook);
-        }
-        catch (IllegalStateException ex) {
+        } catch (IllegalStateException ex) {
             // ignore - VM is already shutting down
         }
     }

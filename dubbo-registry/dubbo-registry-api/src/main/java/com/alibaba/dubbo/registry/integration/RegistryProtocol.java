@@ -30,11 +30,7 @@ import com.alibaba.dubbo.registry.Registry;
 import com.alibaba.dubbo.registry.RegistryFactory;
 import com.alibaba.dubbo.registry.RegistryService;
 import com.alibaba.dubbo.registry.support.ProviderConsumerRegTable;
-import com.alibaba.dubbo.rpc.Exporter;
-import com.alibaba.dubbo.rpc.Invoker;
-import com.alibaba.dubbo.rpc.Protocol;
-import com.alibaba.dubbo.rpc.ProxyFactory;
-import com.alibaba.dubbo.rpc.RpcException;
+import com.alibaba.dubbo.rpc.*;
 import com.alibaba.dubbo.rpc.cluster.Cluster;
 import com.alibaba.dubbo.rpc.cluster.Configurator;
 import com.alibaba.dubbo.rpc.protocol.InvokerWrapper;
@@ -47,14 +43,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.alibaba.dubbo.common.Constants.ACCEPT_FOREIGN_IP;
-import static com.alibaba.dubbo.common.Constants.QOS_ENABLE;
-import static com.alibaba.dubbo.common.Constants.QOS_PORT;
-import static com.alibaba.dubbo.common.Constants.VALIDATION_KEY;
+import static com.alibaba.dubbo.common.Constants.*;
 
 /**
  * RegistryProtocol
- *
  */
 public class RegistryProtocol implements Protocol {
 
@@ -122,36 +114,62 @@ public class RegistryProtocol implements Protocol {
     }
 
     public void register(URL registryUrl, URL registedProviderUrl) {
+        // 注册
+        // AbstractRegistryFactory
+        // 注册中心客户端
         Registry registry = registryFactory.getRegistry(registryUrl);
+        //
         registry.register(registedProviderUrl);
     }
 
     @Override
     public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
-        //export invoker
+
+        // =======1. 导出服务，启动netty端口服务
+        // export invoker,导出
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker);
 
+
+        // ========2. 注册服务
+        // 获取注册中心 URL，以 zookeeper 注册中心为例，得到的示例 URL 如下：
+        // zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService
+        //// ?application=demo-provider
+        //// &dubbo=2.0.2
+        //// &export=dubbo%3A%2F%2F172.17.48.52%3A20880%2Fcom.alibaba.dubbo.demo.DemoService%3Fanyhost%3Dtrue%26application%3Ddemo-provider
         URL registryUrl = getRegistryUrl(originInvoker);
 
         //registry provider
+        // 根据 URL 加载 Registry 实现类，比如 ZookeeperRegistry
         final Registry registry = getRegistry(originInvoker);
+
+        // 获取已注册的服务提供者 URL，比如：
+        // dubbo://172.17.48.52:20880/com.alibaba.dubbo.demo.DemoService?anyhost=true&application=demo-provider&dubbo=2.0.2&generic=false&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello
         final URL registeredProviderUrl = getRegisteredProviderUrl(originInvoker);
 
-        //to judge to delay publish whether or not
+        //to judge to delay publish whether or not 是否注册
         boolean register = registeredProviderUrl.getParameter("register", true);
 
+        // 注册表
         ProviderConsumerRegTable.registerProvider(originInvoker, registryUrl, registeredProviderUrl);
 
+        // 注册
         if (register) {
+            // 模版
             register(registryUrl, registeredProviderUrl);
+            // 注册完成
             ProviderConsumerRegTable.getProviderWrapper(originInvoker).setReg(true);
         }
 
         // Subscribe the override data
         // FIXME When the provider subscribes, it will affect the scene : a certain JVM exposes the service and call the same service. Because the subscribed is cached key with the name of the service, it causes the subscription information to cover.
+        // 获取订阅 URL，比如：
+        // provider://172.17.48.52:20880/com.alibaba.dubbo.demo.DemoService?category=configurators&check=false&anyhost=true&application=demo-provider&dubbo=2.0.2&generic=false&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello
         final URL overrideSubscribeUrl = getSubscribedOverrideUrl(registeredProviderUrl);
+        // 创建监听器
         final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
         overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
+
+        // 注册监听
         registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
         //Ensure that a new exporter instance is returned every time export
         return new DestroyableExporter<T>(exporter, originInvoker, overrideSubscribeUrl, registeredProviderUrl);
@@ -166,6 +184,9 @@ public class RegistryProtocol implements Protocol {
                 exporter = (ExporterChangeableWrapper<T>) bounds.get(key);
                 if (exporter == null) {
                     final Invoker<?> invokerDelegete = new InvokerDelegete<T>(originInvoker, getProviderUrl(originInvoker));
+
+                    // 实际导出
+                    // DubboProtocol
                     exporter = new ExporterChangeableWrapper<T>((Exporter<T>) protocol.export(invokerDelegete), originInvoker);
                     bounds.put(key, exporter);
                 }
@@ -269,7 +290,11 @@ public class RegistryProtocol implements Protocol {
     @Override
     @SuppressWarnings("unchecked")
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
-        url = url.setProtocol(url.getParameter(Constants.REGISTRY_KEY, Constants.DEFAULT_REGISTRY)).removeParameter(Constants.REGISTRY_KEY);
+
+        // dubbo
+        url = url.setProtocol(url.getParameter(Constants.REGISTRY_KEY, Constants.DEFAULT_REGISTRY))
+                .removeParameter(Constants.REGISTRY_KEY);
+        // 获取注册中心实例
         Registry registry = registryFactory.getRegistry(url);
         if (RegistryService.class.equals(type)) {
             return proxyFactory.getInvoker((T) registry, type, url);
@@ -284,6 +309,7 @@ public class RegistryProtocol implements Protocol {
                 return doRefer(getMergeableCluster(), registry, type, url);
             }
         }
+        // 调用 doRefer 继续执行服务引用逻辑
         return doRefer(cluster, registry, type, url);
     }
 
@@ -292,22 +318,29 @@ public class RegistryProtocol implements Protocol {
     }
 
     private <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type, URL url) {
+        // RegistryDirectory
         RegistryDirectory<T> directory = new RegistryDirectory<T>(type, url);
         directory.setRegistry(registry);
         directory.setProtocol(protocol);
         // all attributes of REFER_KEY
         Map<String, String> parameters = new HashMap<String, String>(directory.getUrl().getParameters());
+
+        // 生成服务消费者链接
         URL subscribeUrl = new URL(Constants.CONSUMER_PROTOCOL, parameters.remove(Constants.REGISTER_IP_KEY), 0, type.getName(), parameters);
         if (!Constants.ANY_VALUE.equals(url.getServiceInterface())
                 && url.getParameter(Constants.REGISTER_KEY, true)) {
+            //
             registry.register(subscribeUrl.addParameters(Constants.CATEGORY_KEY, Constants.CONSUMERS_CATEGORY,
                     Constants.CHECK_KEY, String.valueOf(false)));
         }
+
+        // 注册信息
         directory.subscribe(subscribeUrl.addParameter(Constants.CATEGORY_KEY,
                 Constants.PROVIDERS_CATEGORY
                         + "," + Constants.CONFIGURATORS_CATEGORY
                         + "," + Constants.ROUTERS_CATEGORY));
 
+        // 一个注册中心可能有多个服务提供者，因此这里需要将多个服务提供者合并为一个
         Invoker invoker = cluster.join(directory);
         ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);
         return invoker;

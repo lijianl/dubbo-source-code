@@ -20,11 +20,7 @@ import com.alibaba.dubbo.common.Constants;
 import com.alibaba.dubbo.common.URL;
 import com.alibaba.dubbo.common.Version;
 import com.alibaba.dubbo.common.extension.ExtensionLoader;
-import com.alibaba.dubbo.common.utils.ConfigUtils;
-import com.alibaba.dubbo.common.utils.NetUtils;
-import com.alibaba.dubbo.common.utils.ReflectUtils;
-import com.alibaba.dubbo.common.utils.StringUtils;
-import com.alibaba.dubbo.common.utils.UrlUtils;
+import com.alibaba.dubbo.common.utils.*;
 import com.alibaba.dubbo.config.support.Parameter;
 import com.alibaba.dubbo.monitor.MonitorFactory;
 import com.alibaba.dubbo.monitor.MonitorService;
@@ -36,12 +32,12 @@ import com.alibaba.dubbo.rpc.ProxyFactory;
 import com.alibaba.dubbo.rpc.cluster.Cluster;
 import com.alibaba.dubbo.rpc.support.MockInvoker;
 
-import static com.alibaba.dubbo.common.utils.NetUtils.isInvalidLocalHost;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.alibaba.dubbo.common.utils.NetUtils.isInvalidLocalHost;
 
 /**
  * AbstractDefaultConfig
@@ -106,16 +102,17 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
 
     protected void checkRegistry() {
         // for backward compatibility
-
         if (registries == null || registries.isEmpty()) {
+            // 系统配置目录
             String address = ConfigUtils.getProperty("dubbo.registry.address");
             if (address != null && address.length() > 0) {
                 registries = new ArrayList<RegistryConfig>();
                 // 怎么是| 分割的, 分割不同的注册中心
+                // 这个可能不同的注册中心=>zk/etcd/consul
                 String[] as = address.split("\\s*[|]+\\s*");
                 for (String a : as) {
+                    // 保存注册的地址
                     RegistryConfig registryConfig = new RegistryConfig();
-                    // 注册的地址
                     registryConfig.setAddress(a);
                     registries.add(registryConfig);
                 }
@@ -164,62 +161,61 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
 
     // 加载注册中心的链接
     protected List<URL> loadRegistries(boolean provider) {
-
         // 注册中心是否存在
         checkRegistry();
-
         List<URL> registryList = new ArrayList<URL>();
         if (registries != null && !registries.isEmpty()) {
+            // 遍历每个注册中心
             for (RegistryConfig config : registries) {
 
-                // 什么情况下会出现0.0.0.0
+                // 1.处理地址=>address
                 String address = config.getAddress();
                 if (address == null || address.length() == 0) {
+                    // 若 address 为空，则将其设为 0.0.0.0
                     address = Constants.ANYHOST_VALUE;
                 }
-
-                // 系统属性.....
-                // 系统属性可能覆盖系统的配置，这个设计真的好吗
+                // 系统属性..覆盖
                 String sysaddress = System.getProperty("dubbo.registry.address");
                 if (sysaddress != null && sysaddress.length() > 0) {
                     address = sysaddress;
                 }
 
-                // 合法地址
+                // 2. 解析地址=> 每个节点一个URL
                 if (address.length() > 0 && !RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) {
                     Map<String, String> map = new HashMap<String, String>();
                     appendParameters(map, application);
+                    // 添加 RegistryConfig 字段信息到 map 中
                     appendParameters(map, config);
-
+                    //
                     map.put("path", RegistryService.class.getName());
                     map.put("dubbo", Version.getProtocolVersion());
                     map.put(Constants.TIMESTAMP_KEY, String.valueOf(System.currentTimeMillis()));
-
                     if (ConfigUtils.getPid() > 0) {
                         map.put(Constants.PID_KEY, String.valueOf(ConfigUtils.getPid()));
                     }
-
                     if (!map.containsKey("protocol")) {
+                        // remote?
                         if (ExtensionLoader.getExtensionLoader(RegistryFactory.class).hasExtension("remote")) {
                             map.put("protocol", "remote");
                         } else {
+                            // zookeeper
                             map.put("protocol", "dubbo");
                         }
                     }
 
-                    // 解析URL
-                    // 解析的数据结果可以debug一下
-                    // address 可能是注册中心的地址
+                    // 解析URL;同一个注册中的不同节点地址
+                    // address 可能是注册中心的地址 ; 分割
                     List<URL> urls = UrlUtils.parseURLs(address, map);
                     for (URL url : urls) {
-
                         url = url.addParameter(Constants.REGISTRY_KEY, url.getProtocol());
+                        // 将 URL 协议头设置为 registry
                         url = url.setProtocol(Constants.REGISTRY_PROTOCOL);
 
-                        // 判断注册条件,满足则可以注册,暂时不明白这个条件????
-                        //  provider && register = true
-                        //  !provider && subscribe = true
-                        if ((provider && url.getParameter(Constants.REGISTER_KEY, true)) || (!provider && url.getParameter(Constants.SUBSCRIBE_KEY, true))) {
+                        // 这里根据调用着加载不同的注册中心(provider/consumer)
+                        //  provider && register = true  => 服务提供中心
+                        //  !provider && subscribe = true => 服务订阅中心
+                        if ((provider && url.getParameter(Constants.REGISTER_KEY, true))
+                                || (!provider && url.getParameter(Constants.SUBSCRIBE_KEY, true))) {
                             registryList.add(url);
                         }
                     }

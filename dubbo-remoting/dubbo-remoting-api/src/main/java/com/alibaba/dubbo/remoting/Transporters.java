@@ -51,8 +51,11 @@ public class Transporters {
         if (handlers.length == 1) {
             handler = handlers[0];
         } else {
+            //
             handler = new ChannelHandlerDispatcher(handlers);
         }
+        // @SPI("netty")
+        // NettyTransporter
         return getTransporter().bind(url, handler);
     }
 
@@ -75,6 +78,7 @@ public class Transporters {
         return getTransporter().connect(url, handler);
     }
 
+    // @SPI("netty")
     public static Transporter getTransporter() {
         return ExtensionLoader.getExtensionLoader(Transporter.class).getAdaptiveExtension();
     }

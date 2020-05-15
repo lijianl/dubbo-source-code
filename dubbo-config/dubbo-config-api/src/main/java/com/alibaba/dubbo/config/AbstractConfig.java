@@ -198,6 +198,7 @@ public abstract class AbstractConfig implements Serializable {
                     } else {
                         key = prop;
                     }
+                    // set
                     Object value = method.invoke(config);
                     String str = String.valueOf(value).trim();
                     if (value != null && str.length() > 0) {

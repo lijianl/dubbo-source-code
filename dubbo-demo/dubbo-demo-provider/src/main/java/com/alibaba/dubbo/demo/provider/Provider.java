@@ -23,18 +23,18 @@ import com.alibaba.dubbo.config.ProtocolConfig;
 import com.alibaba.dubbo.config.RegistryConfig;
 import com.alibaba.dubbo.config.ServiceConfig;
 import com.alibaba.dubbo.demo.DemoService;
-import com.alibaba.dubbo.rpc.Protocol;
-import com.google.common.collect.Lists;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Provider {
 
     public static void main(String[] args) throws IOException {
-        loadWithApi();
-
+        /// loadWithApi();
+        loadWithXML();
 
         System.in.read(); // press any key to exit
 
@@ -93,8 +93,22 @@ public class Provider {
         //Prevent to get IPV6 address,this way only work in debug mode
         //But you can pass use -Djava.net.preferIPv4Stack=true,then it work well whether in debug mode or not
         System.setProperty("java.net.preferIPv4Stack", "true");
+        // 记载XML启动
+        // new的时候会刷新Context
         ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(new String[]{"META-INF/spring/dubbo-demo-provider.xml"});
         context.start();
+    }
+
+    public static void testMap() {
+        ConcurrentHashMap<String, Integer> cMap = new ConcurrentHashMap<String, Integer>();
+        cMap.put("key", 1);
+    }
+
+
+    public void testT() {
+        List<String> ls = new ArrayList<String>();
+        List<?> lx = new ArrayList<String>();
+        // Class.forName()
     }
 
 }

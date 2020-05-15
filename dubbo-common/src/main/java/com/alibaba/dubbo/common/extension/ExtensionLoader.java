@@ -440,6 +440,8 @@ public class ExtensionLoader<T> {
 
 
     // 3. ======== adaptive,自适应的代理逻辑
+
+
     // loaderClass已经缓存，一个接口只有一个Adaptive实现
     // private volatile Class<?> cachedAdaptiveClass = null;
     // 缓存@Adaptice的实例

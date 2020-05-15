@@ -82,17 +82,22 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
 
     @Override
     public Registry getRegistry(URL url) {
+
         url = url.setPath(RegistryService.class.getName())
                 .addParameter(Constants.INTERFACE_KEY, RegistryService.class.getName())
                 .removeParameters(Constants.EXPORT_KEY, Constants.REFER_KEY);
+
         String key = url.toServiceString();
         // Lock the registry access process to ensure a single instance of the registry
+
         LOCK.lock();
         try {
             Registry registry = REGISTRIES.get(key);
             if (registry != null) {
                 return registry;
             }
+            // 自适应记载
+            // ZookeeperRegistryFactory
             registry = createRegistry(url);
             if (registry == null) {
                 throw new IllegalStateException("Can not create registry " + url);

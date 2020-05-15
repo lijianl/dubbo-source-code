@@ -23,11 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -104,12 +100,19 @@ public abstract class Wrapper {
 
         Wrapper ret = WRAPPER_MAP.get(c);
         if (ret == null) {
+            // 全是Wapper
             ret = makeWrapper(c);
             WRAPPER_MAP.put(c, ret);
         }
         return ret;
     }
 
+    /**
+     * 最好能写出代理的模版
+     *
+     * @param c
+     * @return
+     */
     private static Wrapper makeWrapper(Class<?> c) {
         if (c.isPrimitive())
             throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);

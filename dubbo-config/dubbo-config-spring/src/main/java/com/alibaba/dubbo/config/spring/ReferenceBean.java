@@ -16,12 +16,7 @@
  */
 package com.alibaba.dubbo.config.spring;
 
-import com.alibaba.dubbo.config.ApplicationConfig;
-import com.alibaba.dubbo.config.ConsumerConfig;
-import com.alibaba.dubbo.config.ModuleConfig;
-import com.alibaba.dubbo.config.MonitorConfig;
-import com.alibaba.dubbo.config.ReferenceConfig;
-import com.alibaba.dubbo.config.RegistryConfig;
+import com.alibaba.dubbo.config.*;
 import com.alibaba.dubbo.config.annotation.Reference;
 import com.alibaba.dubbo.config.spring.extension.SpringExtensionFactory;
 import com.alibaba.dubbo.config.support.Parameter;
@@ -41,7 +36,13 @@ import java.util.Map;
  *
  * @export
  */
-public class ReferenceBean<T> extends ReferenceConfig<T> implements FactoryBean, ApplicationContextAware, InitializingBean, DisposableBean {
+public class ReferenceBean<T>
+        extends ReferenceConfig<T>
+        //  FactoryBean => getObject
+        implements FactoryBean,
+        ApplicationContextAware,
+        InitializingBean,
+        DisposableBean {
 
     private static final long serialVersionUID = 213195494150089726L;
 

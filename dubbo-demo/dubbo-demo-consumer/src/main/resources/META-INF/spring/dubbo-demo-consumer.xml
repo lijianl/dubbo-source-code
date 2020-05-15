@@ -30,10 +30,14 @@
 
     <!-- generate proxy for the remote service, then demoService can be used in the same way as the
     local regular interface -->
-    <dubbo:reference id="demoService" check="false" version="1.0.0"
+    <dubbo:reference id="demoService"
+                     check="false"
+                     version="1.0.0"
                      interface="com.alibaba.dubbo.demo.DemoService"
-                     url="dubbo://172.17.3.210:20880"/>
+                     url="dubbo://172.17.3.210:20880"
+                     connections="10"/>
     <!--url="dubbo://172.17.3.210:20880"-->
+    <!--<dubbo:consumer-->
 
     <!--工具使用-->
     <bean id="springContextHolder" class="com.alibaba.dubbo.demo.consumer.SpringContextHolder"/>

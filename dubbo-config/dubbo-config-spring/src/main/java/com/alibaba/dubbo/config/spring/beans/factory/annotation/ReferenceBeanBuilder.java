@@ -37,7 +37,8 @@ import static com.alibaba.dubbo.config.spring.util.ObjectUtils.of;
  *
  * @since 2.5.7
  */
-class ReferenceBeanBuilder extends AbstractAnnotationConfigBeanBuilder<Reference, ReferenceBean> {
+class ReferenceBeanBuilder
+        extends AbstractAnnotationConfigBeanBuilder<Reference, ReferenceBean> {
 
 
     private ReferenceBeanBuilder(Reference annotation, ClassLoader classLoader, ApplicationContext applicationContext) {
